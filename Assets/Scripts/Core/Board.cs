@@ -155,6 +155,47 @@ namespace BlockPuzzle.Core
             return result;
         }
 
+        /// <summary>Empties the given rows and columns (used by revive). Reports cleared cells.</summary>
+        public PlacementResult ClearLines(IEnumerable<int> rows, IEnumerable<int> columns)
+        {
+            var result = new PlacementResult();
+            Array.Clear(_scratch, 0, _scratch.Length);
+            foreach (int y in rows)
+            {
+                result.Rows.Add(y);
+                for (int x = 0; x < Width; x++) _scratch[y * Width + x] = true;
+            }
+            foreach (int x in columns)
+            {
+                result.Columns.Add(x);
+                for (int y = 0; y < Height; y++) _scratch[y * Width + x] = true;
+            }
+            for (int y = 0; y < Height; y++)
+                for (int x = 0; x < Width; x++)
+                {
+                    int i = y * Width + x;
+                    if (!_scratch[i] || _cells[i] == Empty) continue;
+                    result.ClearedCells.Add(new ClearedCell(new Cell(x, y), _cells[i] - 1));
+                    _cells[i] = Empty;
+                }
+            result.BoardCleared = IsEmpty;
+            return result;
+        }
+
+        /// <summary>Indices of the most-filled rows (or columns), most-filled first.</summary>
+        public List<int> FullestLines(bool rows, int count)
+        {
+            int n = rows ? Height : Width;
+            var fill = new int[n];
+            for (int y = 0; y < Height; y++)
+                for (int x = 0; x < Width; x++)
+                    if (_cells[y * Width + x] != Empty) fill[rows ? y : x]++;
+            var order = new List<int>();
+            for (int i = 0; i < n; i++) order.Add(i);
+            order.Sort((a, b) => fill[b] != fill[a] ? fill[b].CompareTo(fill[a]) : a.CompareTo(b));
+            return order.GetRange(0, Math.Min(count, n));
+        }
+
         void CollectFullLines(bool[] filled, List<int> rows, List<int> columns)
         {
             for (int y = 0; y < Height; y++)

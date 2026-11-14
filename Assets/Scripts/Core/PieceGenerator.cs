@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
+using BlockPuzzle.Core.Monetization;
 
 namespace BlockPuzzle.Core
 {
     /// <summary>
-    /// Deals trays of pieces. Weighted random with three design rules:
-    ///  * Difficulty ramps with score: tiny pieces get rarer, big ones more common.
-    ///  * Fairness: whenever possible at least one dealt piece fits the board,
-    ///    and on a crowded board at least two do.
-    ///  * Variety: no identical orientation twice in a tray.
+    /// Deals trays of pieces. Weighted random, steered by a <see cref="DealMode"/>:
+    ///  * Normal: difficulty ramps with score (tiny pieces rarer, big ones more common),
+    ///    at least one piece fits whenever possible (two on a crowded board), and no
+    ///    identical orientation appears twice in a tray.
+    ///  * Assist: every piece fits, and the tray is the candidate with the most
+    ///    line-clear potential.
+    ///  * Squeeze: biased to big pieces; picks a tray where nothing fits if one turns up,
+    ///    otherwise the one with the fewest legal placements.
     /// </summary>
     public sealed class PieceGenerator
     {
@@ -28,9 +32,11 @@ namespace BlockPuzzle.Core
             _weights = new float[_pool.Count];
         }
 
-        public PieceShape[] NextTray(Board board, int score)
+        public PieceShape[] NextTray(Board board, int score, DealMode mode = DealMode.Normal)
         {
-            UpdateWeights(score);
+            UpdateWeights(score, mode);
+            if (mode == DealMode.Assist) return AssistTray(board, score);
+            if (mode == DealMode.Squeeze) return SqueezeTray(board);
 
             int fitsAtAll = 0;
             foreach (var p in _pool)
@@ -63,7 +69,62 @@ namespace BlockPuzzle.Core
             return best;
         }
 
-        void UpdateWeights(int score)
+        PieceShape[] AssistTray(Board board, int score)
+        {
+            PieceShape[] best = null;
+            int bestPotential = -1;
+            for (int attempt = 0; attempt < Candidates; attempt++)
+            {
+                var tray = DrawTray();
+                int potential = 0;
+                bool allFit = true;
+                foreach (var p in tray)
+                {
+                    int lines = BestLines(board, p);
+                    if (lines < 0) { allFit = false; break; }
+                    potential += lines;
+                }
+                if (!allFit) continue;
+                if (potential > bestPotential) { best = tray; bestPotential = potential; }
+            }
+            // Board too crowded for a tray where everything fits: fall back to fair dealing.
+            return best ?? NextTray(board, score, DealMode.Normal);
+        }
+
+        /// <summary>Most lines the piece can complete in one placement; -1 if it does not fit.</summary>
+        int BestLines(Board board, PieceShape piece)
+        {
+            int best = -1;
+            for (int y = 0; y <= board.Height - piece.Height; y++)
+                for (int x = 0; x <= board.Width - piece.Width; x++)
+                {
+                    if (!board.CanPlace(piece, x, y)) continue;
+                    board.FindCompletedLines(piece, x, y, _rows, _cols);
+                    int lines = _rows.Count + _cols.Count;
+                    if (lines > best) best = lines;
+                }
+            return best;
+        }
+
+        PieceShape[] SqueezeTray(Board board)
+        {
+            PieceShape[] best = null;
+            int bestPlacements = int.MaxValue;
+            for (int attempt = 0; attempt < Candidates; attempt++)
+            {
+                var tray = DrawTray();
+                int placements = 0;
+                foreach (var p in tray) placements += board.CountPlacements(p);
+                if (placements == 0) return tray;
+                if (placements < bestPlacements) { best = tray; bestPlacements = placements; }
+            }
+            return best;
+        }
+
+        readonly List<int> _rows = new List<int>();
+        readonly List<int> _cols = new List<int>();
+
+        void UpdateWeights(int score, DealMode mode)
         {
             float t = Math.Min(1f, Math.Max(0f, score / (float)ScoreForMaxDifficulty));
             for (int i = 0; i < _pool.Count; i++)
@@ -72,6 +133,7 @@ namespace BlockPuzzle.Core
                 float factor = 1f;
                 if (p.Size <= 2) factor = Lerp(1.1f, 0.55f, t);
                 else if (p.Size >= 5) factor = Lerp(0.75f, 1.4f, t);
+                if (mode == DealMode.Squeeze) factor *= p.Size >= 4 ? 3f : p.Size <= 2 ? 0.1f : 1f;
                 _weights[i] = p.Weight * factor;
             }
         }

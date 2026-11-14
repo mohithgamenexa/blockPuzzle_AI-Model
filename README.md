@@ -35,6 +35,29 @@ For mobile builds, set **Player Settings → Resolution and Presentation → Def
 | **Readability** | Pieces in the tray that can't fit anywhere are greyed out. On game over, the board greys out from top to bottom before the results card appears. |
 | **Persistence** | Best score and mute setting are saved with `PlayerPrefs`. |
 
+## Monetisation: ad-value-based difficulty
+
+The dealer has three modes, chosen for each tray by `DifficultyDirector`:
+
+- **Assist:** every piece fits and the tray has the most line-clear potential.
+- **Normal:** the fair dealing described above.
+- **Squeeze:** big, awkward pieces, preferring a tray where nothing fits.
+
+| Rule | Behaviour (defaults in `Assets/Resources/MonetizationConfig.json`) |
+|---|---|
+| **Ad value** | `LinearAdValuePredictor`: value = exp(bias + Σ w·x). Inputs: recent ad revenue, revenue per rewarded view, rewarded views, sessions, and, *with consent only*, tier-1 country, premium device, haptics and music settings. Players are bucketed Low / Mid / High. |
+| **Ad harvest** | Players who have watched at least 3 rewarded ads have their value × 3.5. |
+| **Boost** | The first 2 trays of a run, the 2 trays after a revive, and clear streaks (Mid and High players) are dealt in Assist mode. |
+| **Squeeze** | Only for High-value players, only when a rewarded ad is ready *and* a revive is still available. It fires once the run reaches the A/B-tested minute, or when the score is within 90% of the personal best (after 2 minutes). Low-value players always get a fair game. |
+| **Revive** | Out of moves → "Watch ad to revive" (6 s offer, 1 per run). Reviving clears the 2 fullest rows and columns and deals Assist trays. **The score is never altered.** |
+| **A/B test** | `EpsilonGreedyBandit` chooses the squeeze minute from 4 / 6 / 10 / 16 / 30, rewarded by ad revenue per run. `forcedArm` in config overrides it for server-side tests. |
+| **Consent** | Shown on first launch. If declined, no device or country data is collected and the player is treated as `tierWithoutConsent` (Low = fair game). |
+| **Remote config** | Set `remoteConfigUrl` to a URL serving the same JSON. It is cached and applied from the next launch. `dynamicDifficultyEnabled: false` turns the whole system off. |
+
+Ads go through `IAdService`. `MockAdService` shows a 3-second placeholder ad with simulated fill and eCPM. To go live, implement `IAdService` over your ad SDK (LevelPlay, AdMob, AppLovin MAX) and create it in `MonetizationManager.Init`. In development builds, a readout in the bottom-left corner shows the predicted value, tier, deal mode and the reason for it.
+
+Before release, make sure your privacy policy, store data-safety forms and iOS App Tracking Transparency prompt cover the data listed above.
+
 ## Project layout
 
 ```
@@ -45,6 +68,7 @@ Assets/
       PieceCatalog.cs    piece families, rotations and colours
       PieceGenerator.cs  weighted, fair tray dealing with difficulty ramp
       ScoreKeeper.cs     points, combos, perfect-clear bonus
+      Monetization/      config, player profile, ad-value predictor, difficulty director, bandit
     Game/     Unity presentation layer
       GameController.cs  game loop, drag & drop, layout, game over / restart
       BoardView.cs       board rendering, ghost preview, line highlight
@@ -54,9 +78,10 @@ Assets/
       SpriteFactory.cs   procedural bevelled block / slot / panel / icon sprites
       Sfx.cs             synthesised sound effects
       Palette.cs         every colour in one place
+      Monetization/      MonetizationManager, IAdService, MockAdService
       PointerInput.cs    works with the legacy Input Manager or the Input System package
     Editor/   SceneSetup.cs  creates the Main scene and registers it in Build Settings
-  Tests/EditMode/  NUnit tests for Board, PieceCatalog, PieceGenerator, ScoreKeeper
+  Tests/EditMode/  NUnit tests for the board, pieces, dealer modes, scoring, director, value model and bandit
 ```
 
 Run the tests from **Window → General → Test Runner → EditMode**.

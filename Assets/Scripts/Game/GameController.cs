@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using BlockPuzzle.Core;
+using BlockPuzzle.Core.Monetization;
+using BlockPuzzle.Game.Monetization;
 using UnityEngine;
 
 namespace BlockPuzzle.Game
@@ -27,7 +29,10 @@ namespace BlockPuzzle.Game
         // Snapping: how far (in cells) the piece may be from a valid spot and still snap to it.
         const float SnapTolerance = 0.8f;
 
-        enum State { Playing, Busy, GameOver }
+        // How long the revive offer stays up before it is treated as declined.
+        const float ReviveOfferSeconds = 6f;
+
+        enum State { Playing, Busy, GameOver, Revive, Consent }
 
         Board _board;
         ScoreKeeper _score;
@@ -40,6 +45,7 @@ namespace BlockPuzzle.Game
         Effects _fx;
         Sfx _sfx;
         Hud _hud;
+        MonetizationManager _monet;
 
         readonly PieceView[] _tray = new PieceView[PieceGenerator.TraySize];
         readonly List<int> _rows = new List<int>();
@@ -52,6 +58,12 @@ namespace BlockPuzzle.Game
         int _best, _bestAtStart;
         float _gameOverShownAt;
         Vector3 _cameraRest;
+        int _round;
+        int _clearStreak;
+        bool _trayCleared;
+        bool _runActive;
+        float _reviveDeadline;
+        float _debugTimer;
         float _pixelsPerUnit;
         int _screenW, _screenH;
 
@@ -98,6 +110,11 @@ namespace BlockPuzzle.Game
             _hud = new GameObject("HUD", typeof(RectTransform)).AddComponent<Hud>();
             _hud.Build();
 
+            _monet = new GameObject("Monetization").AddComponent<MonetizationManager>();
+            _monet.transform.SetParent(transform, false);
+            _monet.Init();
+            _monet.SetSettings(!_sfx.Muted);
+
             _best = PlayerPrefs.GetInt(BestKey, 0);
             _hud.SetBest(_best);
             _hud.SetMuted(_sfx.Muted);
@@ -107,6 +124,11 @@ namespace BlockPuzzle.Game
         {
             Layout();
             NewGame();
+            if (_monet.NeedsConsent)
+            {
+                _state = State.Consent;
+                _hud.ShowConsent();
+            }
         }
 
         void SetupCamera()
@@ -174,6 +196,11 @@ namespace BlockPuzzle.Game
             _hud.SetScore(0, instant: true);
             _hud.HideCombo();
             _bestAtStart = _best;
+            _round = 0;
+            _clearStreak = 0;
+            _trayCleared = false;
+            _monet.BeginRun();
+            _runActive = true;
 
             for (int i = 0; i < _tray.Length; i++)
             {
@@ -188,7 +215,11 @@ namespace BlockPuzzle.Game
 
         void DealTray()
         {
-            var shapes = _generator.NextTray(_board, _score.Score);
+            if (_round > 0) _clearStreak = _trayCleared ? _clearStreak + 1 : 0;
+            _trayCleared = false;
+            var mode = _monet.NextDealMode(_round, _score.Score, _bestAtStart, _clearStreak);
+            var shapes = _generator.NextTray(_board, _score.Score, mode);
+            _round++;
             for (int i = 0; i < shapes.Length; i++)
             {
                 var view = PieceView.Create(_trayRoot, shapes[i], i);
@@ -220,6 +251,67 @@ namespace BlockPuzzle.Game
         {
             _state = State.Busy;
             yield return new WaitForSeconds(0.6f);
+
+            if (_monet.CanOfferRevive)
+            {
+                _hud.ShowRevive(_score.Score, _bestAtStart);
+                _reviveDeadline = Time.time + ReviveOfferSeconds;
+                _state = State.Revive;
+                yield break; // Update() resolves the offer
+            }
+            yield return FinalGameOver();
+        }
+
+        void AcceptRevive()
+        {
+            _state = State.Busy;
+            StartCoroutine(_hud.HideRevive());
+            _monet.ShowReviveAd(ok =>
+            {
+                if (ok) Revive();
+                else StartCoroutine(FinalGameOver());
+            });
+        }
+
+        void DeclineRevive()
+        {
+            _state = State.Busy;
+            StartCoroutine(DeclineRoutine());
+        }
+
+        IEnumerator DeclineRoutine()
+        {
+            yield return _hud.HideRevive();
+            yield return FinalGameOver();
+        }
+
+        /// <summary>Clears the fullest rows/columns, keeps the real score and deals a fresh tray.</summary>
+        void Revive()
+        {
+            var cfg = _monet.Config;
+            var result = _board.ClearLines(_board.FullestLines(true, cfg.reviveClearRows),
+                                           _board.FullestLines(false, cfg.reviveClearColumns));
+            _boardView.SyncAll();
+            var center = new Vector2((_board.Width - 1) / 2f, (_board.Height - 1) / 2f);
+            _fx.PlayClear(_boardView, result, center, Palette.Gold);
+            _fx.Shake(0.25f);
+            _sfx.Perfect();
+            _hud.ShowPraise("REVIVED!", Palette.Gold);
+
+            for (int i = 0; i < _tray.Length; i++)
+            {
+                if (_tray[i] != null) Destroy(_tray[i].gameObject);
+                _tray[i] = null;
+            }
+            DealTray();
+            _state = State.Playing;
+            CheckForGameOver();
+        }
+
+        IEnumerator FinalGameOver()
+        {
+            _state = State.Busy;
+            EndRun();
             _sfx.GameOver();
             yield return _boardView.GreyOut();
             yield return new WaitForSeconds(0.3f);
@@ -236,12 +328,20 @@ namespace BlockPuzzle.Game
         {
             _state = State.Busy;
             if (_dragging != null) CancelDrag();
+            EndRun();
             if (_hud.GameOverVisible) yield return _hud.HideGameOver();
 
             foreach (var p in _tray)
                 if (p != null) p.MoveTo(p.transform.position + Vector3.down * 0.2f, 0f, 0.2f, Ease.InCubic);
             yield return _boardView.Wipe();
             NewGame();
+        }
+
+        void EndRun()
+        {
+            if (!_runActive) return;
+            _runActive = false;
+            _monet.EndRun(_score.Score);
         }
 
         // ---------------------------------------------------------------- input
@@ -254,8 +354,26 @@ namespace BlockPuzzle.Game
             var screen = PointerInput.Position;
             var world = ScreenToWorld(screen);
 
+            if (Debug.isDebugBuild && (_debugTimer -= Time.deltaTime) <= 0f)
+            {
+                _debugTimer = 0.25f;
+                _hud.SetDebug(_monet.DebugSummary());
+            }
+
             switch (_state)
             {
+                case State.Consent:
+                    if (!PointerInput.Down) break;
+                    if (HitUi(_hud.ConsentAllow, screen)) ResolveConsent(true);
+                    else if (HitUi(_hud.ConsentDecline, screen)) ResolveConsent(false);
+                    break;
+
+                case State.Revive:
+                    _hud.SetReviveTimer(_reviveDeadline - Time.time);
+                    if (PointerInput.Down && HitUi(_hud.ReviveAccept, screen)) AcceptRevive();
+                    else if ((PointerInput.Down && HitUi(_hud.ReviveDecline, screen)) || Time.time >= _reviveDeadline) DeclineRevive();
+                    break;
+
                 case State.GameOver:
                     if (PointerInput.Down && Time.time - _gameOverShownAt > 0.6f) StartCoroutine(Restart());
                     break;
@@ -279,9 +397,18 @@ namespace BlockPuzzle.Game
         static bool HitUi(RectTransform rt, Vector2 screen) =>
             rt.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rt, screen, null);
 
+        void ResolveConsent(bool allow)
+        {
+            _monet.SetConsent(allow);
+            _sfx.Pick();
+            StartCoroutine(_hud.HideConsent());
+            _state = State.Playing;
+        }
+
         void ToggleSound()
         {
             _sfx.ToggleMute();
+            _monet.SetSettings(!_sfx.Muted);
             _hud.SetMuted(_sfx.Muted);
             _hud.Pulse(_hud.SoundButton);
             _sfx.Pick();
@@ -408,6 +535,7 @@ namespace BlockPuzzle.Game
 
             if (result.LinesCleared > 0)
             {
+                _trayCleared = true;
                 _fx.PlayClear(_boardView, result, pieceCenterCell, piece.Color);
                 _sfx.Clear(result.LinesCleared, ev.Combo);
                 _fx.Shake(Mathf.Min(0.35f, 0.06f * result.LinesCleared + 0.03f * (ev.Combo - 1)));

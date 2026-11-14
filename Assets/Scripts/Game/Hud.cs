@@ -24,6 +24,15 @@ namespace BlockPuzzle.Game
         Text _finalScore, _finalBest, _newBest, _tapToRestart;
         RectTransform _card;
 
+        CanvasGroup _revive, _consent;
+        RectTransform _reviveCard, _consentCard;
+        Text _reviveTitle, _reviveScore, _reviveTimer, _debug;
+
+        public RectTransform ReviveAccept { get; private set; }
+        public RectTransform ReviveDecline { get; private set; }
+        public RectTransform ConsentAllow { get; private set; }
+        public RectTransform ConsentDecline { get; private set; }
+
         float _displayedScore;
         int _targetScore;
         float _scorePunch;
@@ -65,6 +74,13 @@ namespace BlockPuzzle.Game
             _praise.gameObject.SetActive(false);
 
             BuildGameOver();
+            BuildRevive();
+            BuildConsent();
+
+            _debug = TextIn(_root, "Debug", "", 22, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
+            _debug.rectTransform.anchorMin = _debug.rectTransform.anchorMax = new Vector2(0f, 0f);
+            _debug.rectTransform.anchoredPosition = new Vector2(16f, 40f);
+            _debug.gameObject.SetActive(false);
         }
 
         // ---------------------------------------------------------------- layout
@@ -82,6 +98,8 @@ namespace BlockPuzzle.Game
             Place(_comboRt, worldToScreen(comboPos) / s);
             Place(_praiseRt, worldToScreen(boardCenter) / s);
             Place(_card, worldToScreen(boardCenter) / s);
+            Place(_reviveCard, worldToScreen(boardCenter) / s);
+            Place(_consentCard, worldToScreen(boardCenter) / s);
         }
 
         static void Place(RectTransform rt, Vector2 canvasPos)
@@ -280,6 +298,142 @@ namespace BlockPuzzle.Game
             _gameOverRoutine = null;
             yield return Tween.Run(0.2f, Ease.Linear, t => _gameOver.alpha = 1f - t);
             _gameOver.gameObject.SetActive(false);
+        }
+
+        // ---------------------------------------------------------------- revive
+
+        void BuildRevive()
+        {
+            _revive = Modal("Revive", new Vector2(720f, 700f), out _reviveCard);
+
+            _reviveTitle = TextIn(_reviveCard, "Title", "SO CLOSE!", 70, Palette.Gold, TextAnchor.MiddleCenter);
+            _reviveTitle.fontStyle = FontStyle.Bold;
+            _reviveTitle.rectTransform.anchoredPosition = new Vector2(0f, 250f);
+
+            _reviveScore = TextIn(_reviveCard, "Score", "", 40, Palette.TextDim, TextAnchor.MiddleCenter);
+            _reviveScore.rectTransform.anchoredPosition = new Vector2(0f, 165f);
+
+            _reviveTimer = TextIn(_reviveCard, "Timer", "5", 110, Color.white, TextAnchor.MiddleCenter);
+            _reviveTimer.fontStyle = FontStyle.Bold;
+            _reviveTimer.rectTransform.anchoredPosition = new Vector2(0f, 40f);
+
+            ReviveAccept = PillButton(_reviveCard, "Accept", "WATCH AD TO REVIVE", Palette.Hex(0x2ECC71), new Vector2(0f, -110f));
+            ReviveDecline = TextButton(_reviveCard, "Decline", "No thanks", new Vector2(0f, -235f));
+        }
+
+        public void ShowRevive(int score, int best)
+        {
+            bool nearBest = best > 0 && score >= best * 0.8f && score < best;
+            _reviveTitle.text = nearBest ? "SO CLOSE!" : "OUT OF MOVES";
+            _reviveScore.text = nearBest ? $"Only {best - score} points from your best!" : $"Score {score}";
+            StartCoroutine(FadeIn(_revive, _reviveCard));
+        }
+
+        public void SetReviveTimer(float secondsLeft) => _reviveTimer.text = Mathf.CeilToInt(Mathf.Max(0f, secondsLeft)).ToString();
+
+        public IEnumerator HideRevive() => FadeOut(_revive);
+
+        // ---------------------------------------------------------------- consent
+
+        void BuildConsent()
+        {
+            _consent = Modal("Consent", new Vector2(760f, 720f), out _consentCard);
+
+            var title = TextIn(_consentCard, "Title", "PERSONALISED EXPERIENCE", 46, Color.white, TextAnchor.MiddleCenter);
+            title.fontStyle = FontStyle.Bold;
+            title.rectTransform.anchoredPosition = new Vector2(0f, 260f);
+
+            var body = TextIn(_consentCard, "Body",
+                "We use your device model, country and ad activity to personalise the ads you see " +
+                "and to tune game difficulty. You can play either way, and change this by reinstalling.",
+                32, Palette.TextDim, TextAnchor.MiddleCenter);
+            body.horizontalOverflow = HorizontalWrapMode.Wrap;
+            body.rectTransform.sizeDelta = new Vector2(640f, 260f);
+            body.rectTransform.anchoredPosition = new Vector2(0f, 80f);
+
+            ConsentAllow = PillButton(_consentCard, "Allow", "ALLOW", Palette.Hex(0x42B8FF), new Vector2(0f, -130f));
+            ConsentDecline = TextButton(_consentCard, "Decline", "Not now", new Vector2(0f, -255f));
+        }
+
+        public void ShowConsent() => StartCoroutine(FadeIn(_consent, _consentCard));
+
+        public IEnumerator HideConsent() => FadeOut(_consent);
+
+        // ---------------------------------------------------------------- debug
+
+        public void SetDebug(string text)
+        {
+            _debug.gameObject.SetActive(!string.IsNullOrEmpty(text));
+            _debug.text = text;
+        }
+
+        // ---------------------------------------------------------------- modal helpers
+
+        CanvasGroup Modal(string name, Vector2 size, out RectTransform card)
+        {
+            var overlay = NewRect(name, _root);
+            overlay.anchorMin = Vector2.zero;
+            overlay.anchorMax = Vector2.one;
+            overlay.offsetMin = overlay.offsetMax = Vector2.zero;
+            var dim = overlay.gameObject.AddComponent<Image>();
+            dim.color = Palette.Overlay;
+            dim.raycastTarget = false;
+            var group = overlay.gameObject.AddComponent<CanvasGroup>();
+
+            card = NewRect("Card", overlay);
+            card.sizeDelta = size;
+            var img = card.gameObject.AddComponent<Image>();
+            img.sprite = SpriteFactory.Panel;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 0.6f;
+            img.color = Palette.Card;
+            img.raycastTarget = false;
+
+            overlay.gameObject.SetActive(false);
+            return group;
+        }
+
+        RectTransform PillButton(RectTransform parent, string name, string label, Color color, Vector2 position)
+        {
+            var rt = NewRect(name, parent);
+            rt.sizeDelta = new Vector2(560f, 120f);
+            rt.anchoredPosition = position;
+            var img = rt.gameObject.AddComponent<Image>();
+            img.sprite = SpriteFactory.Panel;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 0.55f;
+            img.color = color;
+            img.raycastTarget = false;
+            var text = TextIn(rt, "Label", label, 42, Color.white, TextAnchor.MiddleCenter);
+            text.fontStyle = FontStyle.Bold;
+            AddOutline(text, new Color(0f, 0f, 0f, 0.25f), 2f);
+            return rt;
+        }
+
+        RectTransform TextButton(RectTransform parent, string name, string label, Vector2 position)
+        {
+            var rt = NewRect(name, parent);
+            rt.sizeDelta = new Vector2(360f, 80f);
+            rt.anchoredPosition = position;
+            TextIn(rt, "Label", label, 36, Palette.TextDim, TextAnchor.MiddleCenter);
+            return rt;
+        }
+
+        IEnumerator FadeIn(CanvasGroup group, RectTransform card)
+        {
+            group.gameObject.SetActive(true);
+            yield return Tween.Run(0.3f, Ease.OutBack, t =>
+            {
+                group.alpha = Mathf.Clamp01(t);
+                card.localScale = Vector3.one * Mathf.LerpUnclamped(0.75f, 1f, t);
+            });
+        }
+
+        IEnumerator FadeOut(CanvasGroup group)
+        {
+            if (!group.gameObject.activeSelf) yield break;
+            yield return Tween.Run(0.18f, Ease.Linear, t => group.alpha = 1f - t);
+            group.gameObject.SetActive(false);
         }
 
         // ---------------------------------------------------------------- builders

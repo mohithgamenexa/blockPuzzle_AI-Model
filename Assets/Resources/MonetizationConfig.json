@@ -1,0 +1,39 @@
+{
+    "dynamicDifficultyEnabled": true,
+    "requireConsent": true,
+    "tierWithoutConsent": 0,
+
+    "bias": -4.6,
+    "wRecentAdRevenue": 1.2,
+    "wAvgRewardRevenue": 2.0,
+    "wRewardedViews": 0.08,
+    "wSessions": 0.02,
+    "wTier1Country": 1.1,
+    "wPremiumDevice": 0.7,
+    "wHapticsOn": 0.1,
+    "wMusicOn": 0.05,
+    "tier1Countries": ["US", "GB", "CA", "AU", "DE", "JP", "KR", "FR", "NL", "SE", "NO", "CH", "DK"],
+    "premiumDevicePrefixes": ["iPhone15", "iPhone16", "iPhone17", "iPhone18", "iPad14", "iPad16"],
+    "midValueThreshold": 0.02,
+    "highValueThreshold": 0.08,
+
+    "harvestMinRewardedViews": 3,
+    "harvestMultiplier": 3.5,
+
+    "boostRounds": 2,
+    "streakForBoost": 2,
+    "squeezeMinTier": 2,
+    "squeezeNearBestFraction": 0.9,
+    "squeezeNearBestMinMinutes": 2.0,
+
+    "maxRevivesPerRun": 1,
+    "reviveClearRows": 2,
+    "reviveClearColumns": 2,
+    "reviveAssistRounds": 2,
+
+    "squeezeMinuteArms": [4, 6, 10, 16, 30],
+    "banditEpsilon": 0.15,
+    "forcedArm": -1,
+
+    "remoteConfigUrl": ""
+}
