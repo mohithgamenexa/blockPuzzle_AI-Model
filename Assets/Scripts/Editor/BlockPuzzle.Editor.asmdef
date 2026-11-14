@@ -1,0 +1,11 @@
+{
+    "name": "BlockPuzzle.Editor",
+    "rootNamespace": "BlockPuzzle.Editor",
+    "references": [
+        "BlockPuzzle.Game"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "autoReferenced": false
+}

@@ -1,0 +1,7 @@
+{
+    "name": "BlockPuzzle.Core",
+    "rootNamespace": "BlockPuzzle.Core",
+    "references": [],
+    "noEngineReferences": true,
+    "autoReferenced": true
+}

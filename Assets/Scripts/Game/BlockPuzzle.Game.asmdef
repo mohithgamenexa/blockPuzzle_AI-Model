@@ -1,0 +1,17 @@
+{
+    "name": "BlockPuzzle.Game",
+    "rootNamespace": "BlockPuzzle.Game",
+    "references": [
+        "BlockPuzzle.Core",
+        "UnityEngine.UI",
+        "Unity.InputSystem"
+    ],
+    "autoReferenced": true,
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "BP_INPUT_SYSTEM"
+        }
+    ]
+}
