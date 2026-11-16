@@ -26,6 +26,23 @@ The menu item sets the package name (`com.blockpuzzle.aimodel`), portrait orient
 Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod BlockPuzzle.Editor.AndroidBuild.BuildDevelopmentApk -logFile -
 ```
 
+## Building in the cloud (no local Unity)
+
+`.github/workflows/android-build.yml` builds the development APK with [GameCI](https://game.ci) on every push to `main` or `claude/**`. You can also start it from **Actions → Build Android APK → Run workflow**. Download the APK from the run's **Artifacts** section (`BlockPuzzle-apk`).
+
+One-time setup: add these under **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+|---|---|
+| `UNITY_EMAIL` | your Unity account email |
+| `UNITY_PASSWORD` | your Unity account password |
+| `UNITY_LICENSE` | the full contents of your Unity license file (`.ulf`) |
+
+To get the `.ulf` file for a free Personal license, sign in to Unity Hub once and activate a Personal license (**Preferences → Licenses**). Hub saves the file at:
+- Windows: `C:\ProgramData\Unity\Unity_lic.ulf`
+- macOS: `/Library/Application Support/Unity/Unity_lic.ulf`
+- Linux: `~/.local/share/unity3d/Unity/Unity_lic.ulf`
+
 ## How to play
 
 - Drag one of the three pieces from the tray onto the board.
