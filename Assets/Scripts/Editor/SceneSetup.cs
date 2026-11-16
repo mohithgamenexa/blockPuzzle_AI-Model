@@ -15,7 +15,7 @@ namespace BlockPuzzle.Editor
     [InitializeOnLoad]
     static class SceneSetup
     {
-        const string ScenePath = "Assets/Scenes/Main.unity";
+        internal const string ScenePath = "Assets/Scenes/Main.unity";
 
         static SceneSetup()
         {
@@ -29,7 +29,7 @@ namespace BlockPuzzle.Editor
         }
 
         [MenuItem("Block Puzzle/Create Main Scene")]
-        static void CreateMainScene()
+        internal static void CreateMainScene()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 

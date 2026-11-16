@@ -14,6 +14,18 @@ All art and sound are generated in code. The project contains no imported assets
 
 For mobile builds, set **Player Settings → Resolution and Presentation → Default Orientation** to Portrait. The layout also adapts to landscape and desktop screens.
 
+## Building the Android APK
+
+1. In Unity Hub → **Installs**, add the **Android Build Support** module (it includes OpenJDK and the Android SDK & NDK) to your Unity 6 install.
+2. Open the project and choose **Block Puzzle → Build Android APK (Development)**. The first build takes several minutes.
+3. The APK is written to `Builds/Android/BlockPuzzle-dev.apk`. Copy it to your phone and install it (allow "install unknown apps"), or run `adb install -r Builds/Android/BlockPuzzle-dev.apk`.
+
+The menu item sets the package name (`com.blockpuzzle.aimodel`), portrait orientation, IL2CPP and ARM64/ARMv7, and minimum Android 6.0. The development build shows the monetisation debug readout; the release build hides it. For CI:
+
+```
+Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod BlockPuzzle.Editor.AndroidBuild.BuildDevelopmentApk -logFile -
+```
+
 ## How to play
 
 - Drag one of the three pieces from the tray onto the board.
